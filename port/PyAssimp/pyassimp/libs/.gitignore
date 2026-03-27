@@ -1,0 +1,5 @@
+# Downloaded precompiled assimp binaries
+*.dll
+*.so
+*.so.*
+*.dylib

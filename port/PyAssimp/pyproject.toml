@@ -14,3 +14,9 @@ description = "Python bindings for the Open Asset Import Library (ASSIMP)"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["numpy"]
+
+[project.scripts]
+pyassimp-download-libs = "pyassimp.library_downloader:main"
+
+[tool.setuptools.package-data]
+pyassimp = ["libs/*.dll", "libs/*.so", "libs/*.so.*", "libs/*.dylib"]

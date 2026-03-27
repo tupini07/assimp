@@ -25,6 +25,12 @@ from .errors import AssimpError
 
 additional_dirs, ext_whitelist = [],[]
 
+# The ``libs/`` sub-directory next to this file is where
+# :mod:`library_downloader` places precompiled binaries.
+_libs_dir = os.path.join(os.path.dirname(__file__), 'libs')
+if os.path.isdir(_libs_dir):
+    additional_dirs.append(_libs_dir)
+
 # populate search directories and lists of allowed file extensions
 # depending on the platform we're running on.
 if os.name=='posix':
@@ -260,8 +266,39 @@ def search_library():
                 if loaded: candidates.append(loaded)
 
     if not candidates:
+        # No library found locally – try downloading a precompiled binary.
+        from .library_downloader import try_auto_download
+        if try_auto_download():
+            # Re-scan the libs directory after a successful download.
+            libs_dir = os.path.join(os.path.dirname(__file__), 'libs')
+            if os.path.isdir(libs_dir):
+                for filename in os.listdir(libs_dir):
+                    if filename.lower().find('assimp') == -1:
+                        continue
+                    is_out = 1
+                    for et in ext_whitelist:
+                        if et in filename.lower():
+                            is_out = 0
+                            break
+                    if is_out:
+                        continue
+                    library_path = os.path.join(libs_dir, filename)
+                    logger.debug('Try ' + library_path)
+                    try:
+                        dll = ctypes.cdll.LoadLibrary(library_path)
+                    except Exception as e:
+                        logger.warning(str(e))
+                        continue
+                    loaded = try_load_functions(library_path, dll)
+                    if loaded:
+                        candidates.append(loaded)
+
+    if not candidates:
         # no library found
-        raise AssimpError("assimp library not found")
+        raise AssimpError(
+            "assimp library not found. You can download a precompiled "
+            "binary by running:  python -m pyassimp.library_downloader"
+        )
     else:
         # get the newest library_path
         candidates = map(lambda x: (os.lstat(x[0])[-2], x), candidates)
