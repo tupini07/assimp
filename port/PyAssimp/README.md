@@ -72,13 +72,46 @@ INSTALL
 Install `pyassimp` by running:
 
 ```console
-$ python setup.py install
+$ pip install .
 ```
 
-PyAssimp requires a assimp dynamic library (`DLL` on windows,
-`.so` on linux, `.dylib` on macOS) in order to work. The default search directories are:
+Or install directly from the git repository:
+
+```console
+$ pip install "pyassimp @ git+https://github.com/assimp/assimp#subdirectory=port/PyAssimp"
+```
+
+### Precompiled binaries (recommended)
+
+PyAssimp requires the assimp native library (`DLL` on Windows,
+`.so` on Linux, `.dylib` on macOS). The easiest way to get it is
+to let pyassimp download a precompiled binary from the
+[official GitHub releases](https://github.com/assimp/assimp/releases):
+
+```console
+$ pyassimp-download-libs            # download for the latest release
+$ pyassimp-download-libs v6.0.4     # download for a specific release tag
+```
+
+You can also run the downloader as a module:
+
+```console
+$ python -m pyassimp.library_downloader
+```
+
+Alternatively, the library will be **downloaded automatically** on
+first import if no local copy is found. Set the environment variable
+`PYASSIMP_NO_AUTO_DOWNLOAD=1` to disable this behaviour.
+
+To select a specific release tag for auto-download, set
+`PYASSIMP_RELEASE_TAG` (e.g. `PYASSIMP_RELEASE_TAG=v6.0.4`).
+
+### Manual installation
+
+If you prefer to compile assimp yourself, make sure the shared library
+is placed in one of the default search directories:
   - the current directory
-  - on linux additionally: `/usr/lib`, `/usr/local/lib`,
+  - on Linux additionally: `/usr/lib`, `/usr/local/lib`,
     `/usr/lib/x86_64-linux-gnu`
 
 To build that library, refer to the Assimp master `INSTALL`

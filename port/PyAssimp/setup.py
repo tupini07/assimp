@@ -18,9 +18,15 @@ setup(name='pyassimp',
       maintainer='Séverin Lemaignan',
       maintainer_email='severin@guakamole.org',
       packages=['pyassimp'],
+      package_data={'pyassimp': ['libs/*.dll', 'libs/*.so', 'libs/*.so.*', 'libs/*.dylib']},
       data_files=[
                   ('share/pyassimp', ['README.rst']),
                   ('share/examples/pyassimp', ['scripts/' + f for f in os.listdir('scripts/')])
                  ],
+      entry_points={
+          'console_scripts': [
+              'pyassimp-download-libs=pyassimp.library_downloader:main',
+          ],
+      },
       requires=['numpy']
       )
