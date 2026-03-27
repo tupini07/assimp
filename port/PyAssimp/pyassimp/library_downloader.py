@@ -169,10 +169,9 @@ def _extract_libraries(zip_bytes, dest_dir):
                 continue
             basename = os.path.basename(info.filename)
             # Check if the file has a library extension we want.
+            # This also matches versioned names like libassimp.so.5.4.3
             if not any(basename.endswith(ext) or ext + "." in basename for ext in extensions):
-                # Also match versioned .so files like libassimp.so.5.4.3
-                if not (extensions == (".so",) and ".so." in basename):
-                    continue
+                continue
             # Only extract files that contain 'assimp' in the name.
             if "assimp" not in basename.lower():
                 continue

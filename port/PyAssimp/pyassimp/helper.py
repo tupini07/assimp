@@ -213,6 +213,41 @@ def try_load_functions(library_path, dll):
     export2blob.restype = ctypes.POINTER(ExportDataBlob)
     return (library_path, load, load_mem, export, export2blob, release, dll)
 
+def _scan_directories_for_candidates(directories):
+    '''
+    Scan the given directories for assimp library candidates.
+
+    Returns a list of loaded candidate tuples (see try_load_functions).
+    '''
+    candidates = []
+    for curfolder in directories:
+        if not os.path.isdir(curfolder):
+            continue
+        for filename in os.listdir(curfolder):
+            # our minimum requirement for candidates is that
+            # they should contain 'assimp' somewhere in
+            # their name
+            if filename.lower().find('assimp') == -1:
+                continue
+            if not any(et in filename.lower() for et in ext_whitelist):
+                continue
+
+            library_path = os.path.join(curfolder, filename)
+            logger.debug('Try ' + library_path)
+            try:
+                dll = ctypes.cdll.LoadLibrary(library_path)
+            except Exception as e:
+                logger.warning(str(e))
+                # OK, this except is evil. But different OSs will throw different
+                # errors. So just ignore any errors.
+                continue
+            # see if the functions we need are in the dll
+            loaded = try_load_functions(library_path, dll)
+            if loaded:
+                candidates.append(loaded)
+    return candidates
+
+
 def search_library():
     '''
     Loads the assimp library.
@@ -234,36 +269,7 @@ def search_library():
     except AttributeError:
         pass
 
-    candidates = []
-    # test every file
-    for curfolder in [folder]+additional_dirs:
-        if os.path.isdir(curfolder):
-            for filename in os.listdir(curfolder):
-                # our minimum requirement for candidates is that
-                # they should contain 'assimp' somewhere in
-                # their name                                  
-                if filename.lower().find('assimp')==-1 : 
-                    continue
-                is_out=1
-                for et in ext_whitelist:
-                  if et in filename.lower():
-                    is_out=0
-                    break
-                if is_out:
-                  continue
-                
-                library_path = os.path.join(curfolder, filename)
-                logger.debug('Try ' + library_path)
-                try:
-                    dll = ctypes.cdll.LoadLibrary(library_path)
-                except Exception as e:
-                    logger.warning(str(e))
-                    # OK, this except is evil. But different OSs will throw different
-                    # errors. So just ignore any errors.
-                    continue
-                # see if the functions we need are in the dll
-                loaded = try_load_functions(library_path, dll)
-                if loaded: candidates.append(loaded)
+    candidates = _scan_directories_for_candidates([folder] + additional_dirs)
 
     if not candidates:
         # No library found locally – try downloading a precompiled binary.
@@ -271,27 +277,7 @@ def search_library():
         if try_auto_download():
             # Re-scan the libs directory after a successful download.
             libs_dir = os.path.join(os.path.dirname(__file__), 'libs')
-            if os.path.isdir(libs_dir):
-                for filename in os.listdir(libs_dir):
-                    if filename.lower().find('assimp') == -1:
-                        continue
-                    is_out = 1
-                    for et in ext_whitelist:
-                        if et in filename.lower():
-                            is_out = 0
-                            break
-                    if is_out:
-                        continue
-                    library_path = os.path.join(libs_dir, filename)
-                    logger.debug('Try ' + library_path)
-                    try:
-                        dll = ctypes.cdll.LoadLibrary(library_path)
-                    except Exception as e:
-                        logger.warning(str(e))
-                        continue
-                    loaded = try_load_functions(library_path, dll)
-                    if loaded:
-                        candidates.append(loaded)
+            candidates = _scan_directories_for_candidates([libs_dir])
 
     if not candidates:
         # no library found
