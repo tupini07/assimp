@@ -190,7 +190,8 @@ def _resolve_tag(tag=None):
                 )
             except (URLError, KeyError):
                 logger.warning(
-                    "No GitHub release found for tag %s; "
+                    "Could not fetch GitHub release for tag %s "
+                    "(network error or missing release); "
                     "falling back to latest release.",
                     pinned_tag,
                 )
