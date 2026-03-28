@@ -8,15 +8,23 @@ precompiled binary from https://github.com/assimp/assimp/releases,
 placing it in the ``pyassimp/libs/`` directory so that pyassimp can
 find and load it automatically.
 
+By default the downloader pins the native library to the release that
+matches the installed pyassimp package version (e.g. pyassimp 6.0.2
+downloads the ``v6.0.2`` release).  This avoids ABI mismatches between
+the Python wrapper and the native library.  Pass ``tag="latest"`` or a
+specific tag to override.
+
 Usage as a script::
 
-    python -m pyassimp.library_downloader          # latest release
+    python -m pyassimp.library_downloader          # version-matched release
+    python -m pyassimp.library_downloader latest    # latest release
     python -m pyassimp.library_downloader v6.0.4   # specific tag
 
 Usage from Python::
 
     from pyassimp.library_downloader import download_library
-    download_library()                    # latest release
+    download_library()                    # version-matched release
+    download_library(tag="latest")        # latest release
     download_library(tag="v6.0.4")        # specific tag
 """
 
@@ -28,6 +36,7 @@ import platform
 import struct
 import sys
 import zipfile
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -56,6 +65,32 @@ _EXT_WHITELIST = {
 
 # Timeout (seconds) for HTTP requests.
 _HTTP_TIMEOUT = 60
+
+
+# ---------------------------------------------------------------------------
+# Version helpers
+# ---------------------------------------------------------------------------
+
+
+def _get_package_version():
+    """Return the installed pyassimp version string, or ``None``.
+
+    Uses :func:`importlib.metadata.version` which reads from the
+    installed package metadata.
+    """
+    try:
+        return _pkg_version("pyassimp")
+    except PackageNotFoundError:
+        return None
+
+
+def _version_to_tag(version_str):
+    """Convert a PEP 440 version string to a GitHub release tag.
+
+    >>> _version_to_tag("6.0.2")
+    'v6.0.2'
+    """
+    return f"v{version_str}"
 
 
 # ---------------------------------------------------------------------------
@@ -123,27 +158,76 @@ def _fetch_json(url):
 def _resolve_tag(tag=None):
     """Return ``(tag, download_url)`` for the correct platform asset.
 
-    If *tag* is ``None`` the latest release is used.
+    Resolution order when *tag* is ``None``:
+
+    1. Try the release whose tag matches the installed pyassimp version
+       (e.g. ``v6.0.2``).  This keeps the native library ABI-compatible
+       with the Python wrapper.
+    2. If the version-matched release does not exist (404) or has no
+       matching platform asset, fall back to the latest release with a
+       warning.
+
+    Pass ``tag="latest"`` to skip version matching and always use the
+    latest release.  Any other string is treated as an exact tag.
     """
+    use_latest = tag is not None and tag.lower() == "latest"
+
     if tag is None:
+        # Attempt version-pinned download first.
+        pkg_ver = _get_package_version()
+        if pkg_ver is not None:
+            pinned_tag = _version_to_tag(pkg_ver)
+            try:
+                url = GITHUB_RELEASE_TAG_URL.format(tag=pinned_tag)
+                release = _fetch_json(url)
+                result = _find_platform_asset(release)
+                if result is not None:
+                    return result
+                logger.warning(
+                    "Release %s exists but has no matching platform asset; "
+                    "falling back to latest release.",
+                    pinned_tag,
+                )
+            except (URLError, KeyError):
+                logger.warning(
+                    "No GitHub release found for tag %s; "
+                    "falling back to latest release.",
+                    pinned_tag,
+                )
+        # Fall through to latest.
+        use_latest = True
+
+    if use_latest:
         release = _fetch_json(GITHUB_API_URL)
     else:
         url = GITHUB_RELEASE_TAG_URL.format(tag=tag)
         release = _fetch_json(url)
 
+    result = _find_platform_asset(release)
+    if result is not None:
+        return result
+
+    resolved_tag = release.get("tag_name", tag)
+    prefix = _get_platform_asset_prefix()
+    expected_name = f"{prefix}-{resolved_tag}.zip"
+    raise RuntimeError(
+        f"Could not find asset '{expected_name}' in release {resolved_tag}. "
+        f"Available assets: {[a['name'] for a in release.get('assets', [])]}"
+    )
+
+
+def _find_platform_asset(release):
+    """Return ``(tag, download_url)`` if the release has a matching asset.
+
+    Returns ``None`` when no matching asset is found.
+    """
     tag = release["tag_name"]
     prefix = _get_platform_asset_prefix()
-
-    # Find the matching asset.
     expected_name = f"{prefix}-{tag}.zip"
     for asset in release.get("assets", []):
         if asset["name"] == expected_name:
             return tag, asset["browser_download_url"]
-
-    raise RuntimeError(
-        f"Could not find asset '{expected_name}' in release {tag}. "
-        f"Available assets: {[a['name'] for a in release.get('assets', [])]}"
-    )
+    return None
 
 
 def _download_zip(url):
@@ -199,7 +283,9 @@ def download_library(tag=None, dest_dir=None):
     ----------
     tag : str, optional
         Git tag of the release to download (e.g. ``"v6.0.4"``).
-        Defaults to the latest release.
+        When ``None`` (the default) the tag that matches the installed
+        pyassimp version is used to avoid ABI mismatches.
+        Pass ``"latest"`` to always fetch the newest release.
     dest_dir : str, optional
         Directory to store the downloaded library.
         Defaults to ``<pyassimp-package>/libs/``.
